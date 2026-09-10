@@ -3,6 +3,7 @@ import esphome.config_validation as cv
 from esphome.components import binary_sensor
 from esphome.const import (
     CONF_TYPE,
+    CONF_DEVICE_CLASS,
     DEVICE_CLASS_CONNECTIVITY,
     DEVICE_CLASS_BATTERY,
     DEVICE_CLASS_PROBLEM,
@@ -39,11 +40,29 @@ BINARY_SENSOR_TYPES = {
 }
 
 
-CONFIG_SCHEMA = binary_sensor.binary_sensor_schema(UpsHidBinarySensor).extend(
-    {
-        cv.GenerateID(CONF_UPS_HID_ID): cv.use_id(UpsHidComponent),
-        cv.Required(CONF_TYPE): cv.one_of(*BINARY_SENSOR_TYPES, lower=True),
-    }
+def _apply_sensor_type_defaults(config):
+    """Fill in device_class from BINARY_SENSOR_TYPES before
+    binary_sensor.new_binary_sensor() runs. ESPHome 2026.3.0+ bakes
+    device_class into the entity at compile time (string-pool index)
+    rather than via the now-removed runtime set_device_class() setter."""
+    sensor_type = config[CONF_TYPE]
+    if sensor_type in BINARY_SENSOR_TYPES:
+        sensor_config = BINARY_SENSOR_TYPES[sensor_type]
+
+        if CONF_DEVICE_CLASS not in config and "device_class" in sensor_config:
+            config[CONF_DEVICE_CLASS] = sensor_config["device_class"]
+
+    return config
+
+
+CONFIG_SCHEMA = cv.All(
+    binary_sensor.binary_sensor_schema(UpsHidBinarySensor).extend(
+        {
+            cv.GenerateID(CONF_UPS_HID_ID): cv.use_id(UpsHidComponent),
+            cv.Required(CONF_TYPE): cv.one_of(*BINARY_SENSOR_TYPES, lower=True),
+        }
+    ),
+    _apply_sensor_type_defaults,
 )
 
 
@@ -55,11 +74,3 @@ async def to_code(config):
     sensor_type = config[CONF_TYPE]
     cg.add(var.set_sensor_type(sensor_type))
     cg.add(parent.register_binary_sensor(var, sensor_type))
-
-    # Apply sensor type specific configuration
-    if sensor_type in BINARY_SENSOR_TYPES:
-        sensor_config = BINARY_SENSOR_TYPES[sensor_type]
-
-        # Override config with sensor type defaults if not specified
-        if "device_class" not in config and "device_class" in sensor_config:
-            cg.add(var.set_device_class(sensor_config["device_class"]))
