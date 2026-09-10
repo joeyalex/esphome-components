@@ -11,6 +11,8 @@
 #ifdef USE_ESP32
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "lwip/sockets.h"
+#include "lwip/netdb.h"
 #include <fcntl.h>
 #include <errno.h>
 #endif
