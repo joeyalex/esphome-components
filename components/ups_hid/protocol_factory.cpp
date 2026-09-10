@@ -232,6 +232,23 @@ ProtocolFactory::create_by_name(const std::string& protocol_name, UpsHidComponen
     }
     
     ESP_LOGE(FACTORY_TAG, "No protocol found with name containing '%s'", protocol_name.c_str());
+
+    // --- Diagnostic dump: show exactly what IS in the registry at this point,
+    // so we can tell apart "registry is empty" (registration never ran) from
+    // "registry has entries but none matched" (a real logic bug) instead of
+    // guessing from the absence of other log lines.
+    ESP_LOGE(FACTORY_TAG, "Registry diagnostic: %zu vendor(s) registered, %zu fallback protocol(s) registered",
+             vendor_registry.size(), fallback_registry.size());
+    for (const auto& vendor_pair : vendor_registry) {
+        ESP_LOGE(FACTORY_TAG, "  vendor 0x%04X: %zu protocol(s)", vendor_pair.first, vendor_pair.second.size());
+        for (const auto& info : vendor_pair.second) {
+            ESP_LOGE(FACTORY_TAG, "    - '%s'", info.name.c_str());
+        }
+    }
+    for (const auto& info : fallback_registry) {
+        ESP_LOGE(FACTORY_TAG, "  fallback: '%s'", info.name.c_str());
+    }
+
     return nullptr;
 }
 

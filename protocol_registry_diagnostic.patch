@@ -1,0 +1,56 @@
+diff --git a/components/ups_hid/protocol_factory.cpp b/components/ups_hid/protocol_factory.cpp
+index 6031018..fc56604 100644
+--- a/components/ups_hid/protocol_factory.cpp
++++ b/components/ups_hid/protocol_factory.cpp
+@@ -232,6 +232,23 @@ ProtocolFactory::create_by_name(const std::string& protocol_name, UpsHidComponen
+     }
+     
+     ESP_LOGE(FACTORY_TAG, "No protocol found with name containing '%s'", protocol_name.c_str());
++
++    // --- Diagnostic dump: show exactly what IS in the registry at this point,
++    // so we can tell apart "registry is empty" (registration never ran) from
++    // "registry has entries but none matched" (a real logic bug) instead of
++    // guessing from the absence of other log lines.
++    ESP_LOGE(FACTORY_TAG, "Registry diagnostic: %zu vendor(s) registered, %zu fallback protocol(s) registered",
++             vendor_registry.size(), fallback_registry.size());
++    for (const auto& vendor_pair : vendor_registry) {
++        ESP_LOGE(FACTORY_TAG, "  vendor 0x%04X: %zu protocol(s)", vendor_pair.first, vendor_pair.second.size());
++        for (const auto& info : vendor_pair.second) {
++            ESP_LOGE(FACTORY_TAG, "    - '%s'", info.name.c_str());
++        }
++    }
++    for (const auto& info : fallback_registry) {
++        ESP_LOGE(FACTORY_TAG, "  fallback: '%s'", info.name.c_str());
++    }
++
+     return nullptr;
+ }
+ 
+diff --git a/components/ups_hid/protocol_factory.h b/components/ups_hid/protocol_factory.h
+index f542af6..55b84b8 100644
+--- a/components/ups_hid/protocol_factory.h
++++ b/components/ups_hid/protocol_factory.h
+@@ -109,7 +109,13 @@ class ProtocolFactory;
+                 esphome::ups_hid::ProtocolFactory::register_protocol_for_vendor(vendor_id, info); \
+             } \
+         }; \
+-        static protocol_name##_registrar protocol_name##_reg; \
++        /* __attribute__((used)) is required here: this object's only job is */ \
++        /* its constructor's side effect (self-registration). Nothing else in */ \
++        /* the program ever references it by name, so link-time dead-code */ \
++        /* elimination (-ffunction-sections/-fdata-sections + --gc-sections, */ \
++        /* standard on ESP-IDF builds) is otherwise free to strip it entirely, */ \
++        /* silently dropping this protocol from the registry at runtime. */ \
++        static protocol_name##_registrar protocol_name##_reg __attribute__((used)); \
+     }
+ 
+ // Register fallback protocol
+@@ -126,7 +132,7 @@ class ProtocolFactory;
+                 esphome::ups_hid::ProtocolFactory::register_fallback_protocol(info); \
+             } \
+         }; \
+-        static protocol_name##_fallback_registrar protocol_name##_fallback_reg; \
++        static protocol_name##_fallback_registrar protocol_name##_fallback_reg __attribute__((used)); \
+     }
+ 
+ } // namespace ups_hid

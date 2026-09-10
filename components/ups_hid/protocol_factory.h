@@ -109,7 +109,13 @@ class ProtocolFactory;
                 esphome::ups_hid::ProtocolFactory::register_protocol_for_vendor(vendor_id, info); \
             } \
         }; \
-        static protocol_name##_registrar protocol_name##_reg; \
+        /* __attribute__((used)) is required here: this object's only job is */ \
+        /* its constructor's side effect (self-registration). Nothing else in */ \
+        /* the program ever references it by name, so link-time dead-code */ \
+        /* elimination (-ffunction-sections/-fdata-sections + --gc-sections, */ \
+        /* standard on ESP-IDF builds) is otherwise free to strip it entirely, */ \
+        /* silently dropping this protocol from the registry at runtime. */ \
+        static protocol_name##_registrar protocol_name##_reg __attribute__((used)); \
     }
 
 // Register fallback protocol
@@ -126,7 +132,7 @@ class ProtocolFactory;
                 esphome::ups_hid::ProtocolFactory::register_fallback_protocol(info); \
             } \
         }; \
-        static protocol_name##_fallback_registrar protocol_name##_fallback_reg; \
+        static protocol_name##_fallback_registrar protocol_name##_fallback_reg __attribute__((used)); \
     }
 
 } // namespace ups_hid
