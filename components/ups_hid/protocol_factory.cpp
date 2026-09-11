@@ -64,16 +64,28 @@ ProtocolFactory::get_fallback_registry() {
 
 void ProtocolFactory::ensure_initialized() {
     // Registries are initialized on first access due to static storage
-    // This function exists for explicit initialization if needed
-    static bool initialized = false;
-    if (!initialized) {
-        ESP_LOGD(FACTORY_TAG, "Protocol factory registries initialized");
-        initialized = true;
-    }
+    // (Meyer's singleton pattern in get_vendor_registry()/get_fallback_registry()).
+    //
+    // IMPORTANT: this function is called from protocol registrars' global
+    // static constructors — running during do_global_ctors(), before
+    // app_main() — via register_protocol_for_vendor()/register_fallback_protocol().
+    // ESPHome's Logger is itself a separately-constructed global object, and
+    // C++ gives no guarantee about initialization order between global
+    // objects defined in different translation units. Calling into Logger
+    // (even just ESP_LOGD) from here is unsafe: if Logger's internal
+    // std::map hasn't been constructed yet, this crashes with LoadProhibited
+    // (confirmed by a real device crash log — level_for() dereferencing an
+    // uninitialized std::map's internal tree pointers).
+    //
+    // So: no logging here, ever. This function intentionally does nothing.
 }
 
 void ProtocolFactory::register_protocol_for_vendor(uint16_t vendor_id, 
                                                   const ProtocolInfo& info) {
+    // NOTE: this runs during static initialization (called from protocol
+    // registrars' global constructors, before app_main()/Logger exist) — see
+    // the comment on ensure_initialized(). No ESP_LOG* calls in this
+    // function, ever.
     ensure_initialized();
     
     auto& registry = get_vendor_registry();
@@ -84,12 +96,11 @@ void ProtocolFactory::register_protocol_for_vendor(uint16_t vendor_id,
               [](const ProtocolInfo& a, const ProtocolInfo& b) {
                   return a.priority > b.priority;
               });
-    
-    ESP_LOGI(FACTORY_TAG, "Registered protocol '%s' for vendor 0x%04X (priority %d)", 
-             info.name.c_str(), vendor_id, info.priority);
 }
 
 void ProtocolFactory::register_fallback_protocol(const ProtocolInfo& info) {
+    // NOTE: same static-initialization-time constraint as
+    // register_protocol_for_vendor() above — no ESP_LOG* calls here.
     ensure_initialized();
     
     auto& registry = get_fallback_registry();
@@ -100,9 +111,6 @@ void ProtocolFactory::register_fallback_protocol(const ProtocolInfo& info) {
               [](const ProtocolInfo& a, const ProtocolInfo& b) {
                   return a.priority > b.priority;
               });
-    
-    ESP_LOGI(FACTORY_TAG, "Registered fallback protocol '%s' (priority %d)", 
-             info.name.c_str(), info.priority);
 }
 
 std::unique_ptr<UpsProtocolBase> 
