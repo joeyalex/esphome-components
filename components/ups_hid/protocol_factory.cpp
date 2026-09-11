@@ -6,6 +6,47 @@
 namespace esphome {
 namespace ups_hid {
 
+// Forward declarations of each protocol's creator function. These are defined
+// (not just declared) in protocol_apc.cpp / protocol_cyberpower.cpp /
+// protocol_generic.cpp, and referenced from THOSE files' own
+// REGISTER_UPS_PROTOCOL_FOR_VENDOR/REGISTER_UPS_FALLBACK_PROTOCOL macro
+// invocations to build each protocol's self-registering static object.
+//
+// The problem: this component is built into a static archive (.a), and
+// nothing outside protocol_apc.cpp/protocol_cyberpower.cpp/protocol_generic.cpp
+// ever references any symbol those files define — their creator functions'
+// addresses are only ever taken from *within* their own file, by their own
+// registrar constructor. Static-library linking pulls in an object file from
+// an archive only when something *outside* that archive member has an
+// unresolved reference into it; with no such reference, the linker's archive
+// scan never has a reason to extract these .o files at all, so their
+// self-registering static objects — and therefore their whole protocol
+// registration — silently never happen. This is a different (and earlier)
+// problem than ordinary dead-code elimination: __attribute__((used)) alone
+// does not fix it, because it only protects code that is already part of the
+// link, and these files are never part of the link in the first place.
+//
+// The fix is the force_link_protocols array below: a genuine external
+// reference, from this file (which the archive linker *does* need, since
+// ups_hid.cpp and others call into it), into each protocol file. That forces
+// the linker to pull in protocol_apc.o/protocol_cyberpower.o/protocol_generic.o
+// after all, letting their registrar constructors run normally.
+std::unique_ptr<UpsProtocolBase> create_apc_protocol(UpsHidComponent* parent);
+std::unique_ptr<UpsProtocolBase> create_cyberpower_protocol(UpsHidComponent* parent);
+std::unique_ptr<UpsProtocolBase> create_generic_protocol(UpsHidComponent* parent);
+
+namespace {
+// The array itself also needs __attribute__((used)): nothing reads it either,
+// so without this it would just be link-time dead weight that --gc-sections
+// is free to discard, silently undoing the whole point of having it.
+using ProtocolCreatorFn = std::unique_ptr<UpsProtocolBase> (*)(UpsHidComponent*);
+static const ProtocolCreatorFn force_link_protocols[] __attribute__((used)) = {
+    &create_apc_protocol,
+    &create_cyberpower_protocol,
+    &create_generic_protocol,
+};
+}  // namespace
+
 static const char *const FACTORY_TAG = "ups_hid.factory";
 
 // Static registry implementations
